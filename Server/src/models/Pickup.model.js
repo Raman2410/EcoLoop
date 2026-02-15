@@ -15,12 +15,12 @@ const pickupSchema = new mongoose.Schema({
     },
 
     scrapType: {
-      scrapType: {
+    
       type: String,
       enum: SCRAP_TYPES,
       required: true,
       set: (value) => value.trim().toUpperCase(),
-    },
+
     },
 
     approxLoad: {
@@ -71,4 +71,4 @@ const pickupSchema = new mongoose.Schema({
   { timestamps: true
 });
 
-export const Pickup = mongoose.model("pickup", pickupSchema); 
+export default mongoose.model("Pickup", pickupSchema);

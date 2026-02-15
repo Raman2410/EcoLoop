@@ -22,4 +22,4 @@ const scrapPriceSchema = new mongoose.Schema({
   { timestamps: true }
 );
 
-export const ScrapPrice = mongoose.model("ScrapPrice", scrapPriceSchema);
+export default mongoose.model("ScrapPrice", scrapPriceSchema);

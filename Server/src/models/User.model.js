@@ -60,7 +60,7 @@ const UserSchema = new mongoose.Schema({
 
     vehicleType: {
       type: String,
-      enum: ["Scooter", "bike", "auto", "truck"],
+      enum: ["cycle", "bike", "auto", "truck"],
       required: function() {
         return this.role === "collector";
       },
@@ -109,4 +109,4 @@ const UserSchema = new mongoose.Schema({
   { timestamps: true }
 );
 
- export const User = mongoose.model("user",UserSchema);
+export default mongoose.model("User", UserSchema);

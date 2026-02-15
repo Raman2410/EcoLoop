@@ -4,21 +4,29 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-  "start": "node src/server.js",
-  "dev": "nodemon src/server.js"
-
+    "start": "node src/server.js",
+    "dev": "nodemon src/server.js",
+    "migrate": "node -r dotenv/config scripts/runMigrations.js",
+    "api:smoke": "node -r dotenv/config src/scripts/apiSmokeTest.js"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "type": "module",
   "dependencies": {
+    "axios": "^1.13.5",
     "bcryptjs": "^3.0.3",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.6",
     "dotenv": "^17.3.1",
     "express": "^5.2.1",
+    "express-rate-limit": "^8.2.1",
+    "helmet": "^8.1.0",
+    "jsonwebtoken": "^9.0.3",
+    "migrate": "^2.1.0",
     "mongoose": "^9.2.1",
-    "nodemon": "^3.1.11"
+    "nodemon": "^3.1.11",
+    "pg": "^8.18.0",
+    "uuid": "^13.0.0"
   }
 }
