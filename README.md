@@ -85,31 +85,7 @@ npm run dev            # Start frontend on port 5173
 
 ## 🔐 Environment Variables
 
-### Server (`Server/.env`)
-```env
-PORT=3000
-NODE_ENV=development
 
-# MongoDB
-MONGO_URI=mongodb+srv://<user>:<pass>@cluster.mongodb.net/ecoloop
-
-# Auth
-JWT_SECRET=your_strong_secret_here
-
-# CORS
-ALLOWED_ORIGIN=http://localhost:5173
-
-# PostgreSQL (Supabase or local)
-POSTGRES_URL=postgresql://user:pass@host:5432/postgres
-
-# Twilio SMS
-SMS_PROVIDER=twilio
-TWILIO_ACCOUNT_SID=ACxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-TWILIO_AUTH_TOKEN=your_twilio_auth_token
-TWILIO_PHONE_NUMBER=+1234567890
-```
-
----
 
 ## 📡 API Endpoints
 
