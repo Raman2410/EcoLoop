@@ -3,8 +3,11 @@ import {
   createPickup,
   getMyPickups,
   getPendingPickups,
+  getAssignedPickups,
+  getCompletedPickups,
   acceptPickup,
-  completePickup, // ✅ ADD
+  completePickup,
+  cancelPickup,
 } from "../controllers/pickupController.js";
 
 import {
@@ -21,14 +24,10 @@ router.get("/my", protect, userOnly, getMyPickups);
 
 // Collector routes
 router.get("/pending", protect, collectorOnly, getPendingPickups);
+router.get("/assigned", protect, collectorOnly, getAssignedPickups);
+router.get("/completed", protect, collectorOnly, getCompletedPickups);
 router.put("/accept/:id", protect, collectorOnly, acceptPickup);
-
-// ✅ NEW: Collector completes pickup
-router.patch(
-  "/complete/:id",
-  protect,
-  collectorOnly,
-  completePickup
-);
+router.patch("/complete/:id", protect, collectorOnly, completePickup);
+router.patch("/cancel/:id", protect, userOnly, cancelPickup);
 
 export default router;

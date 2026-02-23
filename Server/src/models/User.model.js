@@ -109,4 +109,8 @@ const UserSchema = new mongoose.Schema({
   { timestamps: true }
 );
 
+// Indexes for common query patterns
+UserSchema.index({ role: 1 });
+UserSchema.index({ isVerified: 1 });
+
 export default mongoose.model("User", UserSchema);

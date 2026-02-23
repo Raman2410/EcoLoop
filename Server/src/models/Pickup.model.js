@@ -59,7 +59,7 @@ const pickupSchema = new mongoose.Schema({
 
     status: {
       type: String,
-      enum: ["pending", "assigned", "completed", "recycled"],
+      enum: ["pending", "assigned", "completed", "recycled", "cancelled"],
       default: "pending",
     },
 
@@ -70,5 +70,11 @@ const pickupSchema = new mongoose.Schema({
   },
   { timestamps: true
 });
+
+// Indexes for common query patterns
+pickupSchema.index({ userId: 1, status: 1 });
+pickupSchema.index({ collectorId: 1, status: 1 });
+pickupSchema.index({ status: 1 });
+pickupSchema.index({ scheduledDate: 1 });
 
 export default mongoose.model("Pickup", pickupSchema);

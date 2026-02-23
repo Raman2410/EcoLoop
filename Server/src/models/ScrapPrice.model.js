@@ -1,7 +1,17 @@
 import mongoose from "mongoose";
-const SCRAP_TYPES = ["PLASTIC", "PAPER", "METAL", "ELECTRONICS", "GLASS"];
-const scrapPriceSchema = new mongoose.Schema({
-  scrapType: {
+
+const SCRAP_TYPES = [
+  "PLASTIC",
+  "PAPER",
+  "CARDBOARD",
+  "METAL",
+  "ELECTRONICS",
+  "GLASS",
+];
+
+const scrapPriceSchema = new mongoose.Schema(
+  {
+    scrapType: {
       type: String,
       enum: SCRAP_TYPES,
       required: true,

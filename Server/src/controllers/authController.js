@@ -28,7 +28,11 @@ const createTokenPayload = (user) => ({
 const buildUserResponse = (user, includeToken = true) => {
   const response = {
     _id: user._id,
+
+    // ✅ identity fields (FIXES NAVBAR ISSUE)
     name: user.name,
+    fullName: user.fullName || user.name,
+
     email: user.email,
     role: user.role,
   };
@@ -37,7 +41,7 @@ const buildUserResponse = (user, includeToken = true) => {
     response.token = generateToken(createTokenPayload(user));
   }
 
-  // Add role-specific fields
+  // ✅ Role-specific fields
   if (user.role === "collector") {
     Object.assign(response, {
       businessName: user.businessName,
@@ -123,7 +127,7 @@ const buildUserData = (reqBody) => {
 const createUserWallet = async (userId) => {
   try {
     await walletService.createWalletIfNotExists(userId.toString());
-    console.log(`Wallet created for user: ${userId}`);
+  
   } catch (error) {
     console.error("Wallet creation failed:", error.message);
     await User.findByIdAndDelete(userId);
@@ -175,11 +179,24 @@ export const register = async (req, res) => {
       }
     }
 
-    // Check if user already exists
-    const existingUser = await User.findOne({ email });
-    if (existingUser) {
-      return res.status(400).json({ message: "User already exists" });
-    }
+   // Check if user already exists by email
+const existingUserByEmail = await User.findOne({ email });
+if (existingUserByEmail) {
+  return res.status(409).json({ message: "Email already registered" });
+}
+
+// Check if phone already exists (ONLY for collectors)
+if (role === "collector") {
+  const { phone } = req.body;
+
+  const existingUserByPhone = await User.findOne({ phone });
+  if (existingUserByPhone) {
+    return res.status(409).json({
+      message: "Phone number already registered",
+    });
+  }
+}
+
 
     // Hash password and build user data
     const hashedPassword = await bcrypt.hash(password, 10);
@@ -264,12 +281,16 @@ export const verifyOtp = async (req, res) => {
     const token = generateToken(createTokenPayload(user));
     
     return res.status(200).json({
-      message: "Collector verified successfully",
-      token,
-      role: user.role,
-      isVerified: true,
-      businessName: user.businessName,
-    });
+  message: "Collector verified successfully",
+  token,
+  user: {
+    id: user._id,
+    role: user.role,
+    isVerified: user.isVerified,
+    businessName: user.businessName,
+  },
+});
+
 
   } catch (error) {
     console.error("Verify OTP error:", error);
@@ -281,7 +302,7 @@ export const verifyOtp = async (req, res) => {
 export const login = async (req, res) => {
   try {
     const { email, password } = req.body;
-
+     
     // Validate input
     if (!email || !password) {
       return res.status(400).json({ message: "Email and password are required" });

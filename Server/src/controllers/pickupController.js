@@ -136,6 +136,34 @@ const processPickupRewards = async (userId, pickupId, rewardCoins) => {
   });
 };
 
+// ================= COLLECTOR GET CONTROLLERS =================
+
+export const getAssignedPickups = async (req, res) => {
+  try {
+    const pickups = await Pickup.find({
+      collectorId: req.user._id,
+      status: "assigned",
+    }).populate("userId", "name phone address");
+    return res.json({ pickups });
+  } catch (error) {
+    console.error("Get assigned pickups error:", error);
+    return res.status(500).json({ message: "Internal server error" });
+  }
+};
+
+export const getCompletedPickups = async (req, res) => {
+  try {
+    const pickups = await Pickup.find({
+      collectorId: req.user._id,
+      status: "completed",
+    }).populate("userId", "name phone address");
+    return res.json({ pickups });
+  } catch (error) {
+    console.error("Get completed pickups error:", error);
+    return res.status(500).json({ message: "Internal server error" });
+  }
+};
+
 // ================= USER CONTROLLERS =================
 
 /**
@@ -144,7 +172,11 @@ const processPickupRewards = async (userId, pickupId, rewardCoins) => {
 export const createPickup = async (req, res) => {
   try {
     const validation = validatePickupCreation(req.body);
-    
+
+
+
+
+
     if (!validation.isValid) {
       return res.status(400).json({ message: validation.message });
     }
@@ -162,10 +194,15 @@ export const createPickup = async (req, res) => {
 
     return res.status(201).json(pickup);
 
-  } catch (error) {
-    console.error("Create pickup error:", error);
-    return res.status(500).json({ message: "Internal server error" });
-  }
+ } catch (error) {
+  console.error("Create pickup FULL error:", error);
+  console.error("Mongoose errors:", error?.errors);
+  return res.status(400).json({
+    message: error.message,
+    errors: error.errors,
+  });
+}
+
 };
 
 /**
@@ -312,6 +349,46 @@ export const completePickup = async (req, res) => {
 
   } catch (error) {
     console.error("Complete pickup error:", error);
+    return res.status(500).json({ message: "Internal server error" });
+  }
+};
+
+/**
+ * USER: Cancel a pending pickup
+ */
+export const cancelPickup = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    if (!isValidObjectId(id)) {
+      return res.status(400).json({ message: "Invalid pickup id" });
+    }
+
+    const pickup = await Pickup.findById(id);
+    if (!pickup) {
+      return res.status(404).json({ message: "Pickup not found" });
+    }
+
+    if (pickup.userId.toString() !== req.user._id.toString()) {
+      return res.status(403).json({ message: "Not authorized to cancel this pickup" });
+    }
+
+    if (pickup.status !== "pending") {
+      return res.status(400).json({
+        message: "Only pending pickups can be cancelled",
+      });
+    }
+
+    pickup.status = "cancelled";
+    await pickup.save();
+
+    return res.status(200).json({
+      success: true,
+      message: "Pickup cancelled successfully",
+    });
+
+  } catch (error) {
+    console.error("Cancel pickup error:", error);
     return res.status(500).json({ message: "Internal server error" });
   }
 };
