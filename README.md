@@ -84,7 +84,25 @@ npm run dev            # Start frontend on port 5173
 ---
 
 ## 🔐 Environment Variables
+ALLOWED_ORIGIN=
+NODE_ENV=
 
+PORT=
+MONGO_URI=
+DB_NAME=
+
+JWT_SECRET=
+POSTGRES_URL=
+
+VITE_SUPABASE_URL=
+VITE_SUPABASE_ANON_KEY=
+FAST2SMS_API_KEY=
+
+
+SMS_PROVIDER=
+TWILIO_ACCOUNT_SID=
+TWILIO_AUTH_TOKEN=
+TWILIO_PHONE_NUMBER=
 
 
 ## 📡 API Endpoints
