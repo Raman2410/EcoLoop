@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import toast from "react-hot-toast";
+import axiosInstance from "../../api/axiosInstance";
 
 const AssignedPickups = () => {
   const [pickups, setPickups] = useState([]);
@@ -13,8 +14,7 @@ const AssignedPickups = () => {
   const fetchAssignedPickups = async () => {
     try {
       const res = await axiosInstance.get("/pickups/assigned");
-      const data = await res.json();
-      setPickups(data.pickups || []);
+      setPickups(res.data.pickups || res.data || []);
     } catch (err) {
       console.error("Failed to load assigned pickups", err);
     } finally {
@@ -27,14 +27,8 @@ const AssignedPickups = () => {
     try {
       const res = await axiosInstance.patch(`/pickups/complete/${pickupId}`);
 
-      const data = await res.json();
-
-      if (!res.ok) {
-         toast.error(data.message || "Failed to complete pickup");
-        
-        return;
-      }
-    toast.success(`✅ Pickup completed! EcoCoins earned: ${data.ecoCoinsEarned}`)
+      const data = res.data;
+      toast.success(`✅ Pickup completed! EcoCoins earned: ${data.ecoCoinsEarned}`);
       // Remove from assigned list after completion
       setPickups((prev) => prev.filter((p) => p._id !== pickupId));
     } catch (err) {

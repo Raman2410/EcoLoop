@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import axiosInstance from "../../api/axiosInstance";
 
 const CompletedPickups = () => {
   const [pickups, setPickups] = useState([]);
@@ -8,8 +9,7 @@ const CompletedPickups = () => {
     const fetchCompletedPickups = async () => {
       try {
         const res = await axiosInstance.get("/pickups/completed");
-        const data = await res.json();
-        setPickups(data.pickups || []);
+        setPickups(res.data.pickups || res.data || []);
       } catch (err) {
         console.error("Failed to load completed pickups", err);
       } finally {
