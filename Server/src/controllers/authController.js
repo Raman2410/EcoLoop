@@ -48,7 +48,18 @@ const buildUserResponse = (user, includeToken = true) => {
       vehicleType: user.vehicleType,
       isAvailable: user.isAvailable,
       isVerified: user.isVerified,
-    });
+      // ✅ Required by SocketContext to join the correct area room(s)
+       // and by getPendingPickups to filter pickups by area
+       serviceArea: user.serviceArea,
+       serviceAreas: user.serviceAreas,
+ 
+       // ✅ Gamification stats & badges
+       totalPickups: user.totalPickups || 0,
+       todayPickups: user.todayPickups || 0,
+       bestDayRecord: user.bestDayRecord || 0,
+       badges: user.badges || [],
+       lastActive: user.lastActive,
+     });
   } else if (user.role === "user") {
     response.ecoCoins = user.ecoCoins;
   }
@@ -130,8 +141,9 @@ const createUserWallet = async (userId) => {
   
   } catch (error) {
     console.error("Wallet creation failed:", error.message);
+    // Rollback user creation if wallet fails
     await User.findByIdAndDelete(userId);
-    throw new Error("Wallet creation failed");
+    throw new Error(`Wallet creation failed: ${error.message}`);
   }
 };
 
@@ -150,6 +162,7 @@ const handleCollectorOTP = async (user) => {
     message: "Collector registered. OTP sent to phone.",
     userId: user._id,
     role: user.role,
+    otp: process.env.NODE_ENV === "production" ? undefined : otp, // Provide fallback for dev
     isVerified: false,
   };
 };
@@ -281,15 +294,22 @@ export const verifyOtp = async (req, res) => {
     const token = generateToken(createTokenPayload(user));
     
     return res.status(200).json({
-  message: "Collector verified successfully",
-  token,
-  user: {
-    id: user._id,
-    role: user.role,
-    isVerified: user.isVerified,
-    businessName: user.businessName,
-  },
-});
+      message: "Collector verified successfully",
+      token,
+      user: {
+        _id: user._id,
+        id: user._id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        isVerified: user.isVerified,
+        businessName: user.businessName,
+        vehicleType: user.vehicleType,
+        isAvailable: user.isAvailable,
+        serviceArea: user.serviceArea,
+        serviceAreas: user.serviceAreas,
+      },
+    });
 
 
   } catch (error) {
@@ -351,6 +371,72 @@ export const logout = async (req, res) => {
 
   } catch (error) {
     console.error("Logout error:", error);
+    return res.status(500).json({ message: "Internal server error" });
+  }
+};
+
+// ================= GET ME =================
+export const getMe = async (req, res) => {
+  try {
+    const user = await User.findById(req.user._id);
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+    const response = buildUserResponse(user, false); // No need to re-generate token
+    return res.status(200).json(response);
+  } catch (error) {
+    console.error("GetMe error:", error);
+    return res.status(500).json({ message: "Internal server error" });
+  }
+};
+
+// ================= UPDATE PROFILE =================
+export const updateProfile = async (req, res) => {
+  try {
+    const { name, businessName, serviceArea, vehicleType, vehicleNumber, phone } = req.body;
+    
+    const user = await User.findById(req.user._id);
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    if (name) user.name = name;
+    if (businessName) user.businessName = businessName;
+    if (serviceArea) user.serviceArea = serviceArea;
+    if (vehicleType) user.vehicleType = vehicleType;
+    if (vehicleNumber) user.vehicleNumber = vehicleNumber;
+    if (phone) user.phone = phone;
+
+    await user.save();
+    
+    const response = buildUserResponse(user, false);
+    return res.status(200).json({ success: true, user: response });
+  } catch (error) {
+    console.error("UpdateProfile error:", error);
+    return res.status(500).json({ message: "Internal server error" });
+  }
+};
+
+// ================= UPDATE AVAILABILITY =================
+export const updateAvailability = async (req, res) => {
+  try {
+    const { isAvailable } = req.body;
+    
+    const user = await User.findById(req.user._id);
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    user.isAvailable = !!isAvailable;
+    await user.save();
+    
+    return res.status(200).json({ 
+      success: true, 
+      isAvailable: user.isAvailable,
+      message: `Availability updated to ${user.isAvailable}` 
+    });
+  } catch (error) {
+    console.error("UpdateAvailability error:", error);
     return res.status(500).json({ message: "Internal server error" });
   }
 };

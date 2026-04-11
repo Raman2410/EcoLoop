@@ -16,6 +16,16 @@ const getWalletByUserId = async (userId) => {
   return rows[0];
 };
 
+const getTransactionsByWalletId = async (walletId) => {
+  const query = `
+    SELECT * FROM wallet_transactions
+    WHERE wallet_id = $1
+    ORDER BY created_at DESC;
+  `;
+  const { rows } = await pool.query(query, [walletId]);
+  return rows;
+};
+
 const updateWalletBalance = async (client, walletId, amount) => {
   const query = `
     UPDATE wallets
@@ -56,6 +66,7 @@ const insertTransaction = async (
 export default {
   createWallet,
   getWalletByUserId,
+  getTransactionsByWalletId,
   updateWalletBalance,
   insertTransaction,
 };

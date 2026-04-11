@@ -1,37 +1,50 @@
 import { createBrowserRouter } from "react-router-dom";
+import { lazy, Suspense } from "react";
+import Loader from "./components/common/Loader";
 
-// Auth
+// Always-loaded (critical path)
 import Login from "./pages/auth/Login";
 import Register from "./pages/auth/Register";
-
-// User layout & pages
-import DashboardLayout from "./components/layout/user/DashboardLayout";
-import Dashboard from "./pages/dashboard/Dashboard";
-import PickupList from "./pages/pickups/PickupList";
-import CreatePickup from "./pages/pickups/CreatePickup";
-import Wallet from "./pages/wallet/Wallet";
-import Profile from "./pages/profile/Profile";
-
-// Collector layout & pages
-import CollectorLayout from "./components/layout/collector/CollectorLayout";
-import CollectorDashboard from "./pages/collector/Dashboard";
-import PickupRequests from "./pages/collector/PickupRequests";
-import PickupDetail from "./pages/collector/PickupDetail";
-import VerifyOtp from "./pages/collector/VerifyOtp";
-import AssignedPickups from "./pages/collector/Assigned";
-import CompletedPickups from "./pages/collector/Completed";
-
-// Guards
 import ProtectedRoute from "./components/auth/ProtectedRoute";
-import CollectorWallet from "./pages/wallet/CollectorWallet";
+import DashboardLayout from "./components/layout/user/DashboardLayout";
+import CollectorLayout from "./components/layout/collector/CollectorLayout";
+
+
+// Lazy-loaded user pages
+const Dashboard = lazy(() => import("./pages/dashboard/Dashboard"));
+const PickupList = lazy(() => import("./pages/pickups/PickupList"));
+const CreatePickup = lazy(() => import("./pages/pickups/CreatePickup"));
+const PickupHistory = lazy(() => import("./pages/pickups/PickupHistory"));
+const PickupDetails = lazy(() => import("./pages/pickups/PickupDetails"));
+const Wallet = lazy(() => import("./pages/wallet/Wallet"));
+const Profile = lazy(() => import("./pages/profile/Profile"));
+
+// AI Decision Engine page
+const AiDecision = lazy(() => import("./pages/AiDecision"));
+
+// Lazy-loaded collector pages
+const CollectorDashboard = lazy(() => import("./pages/collector/Dashboard"));
+const PickupRequests = lazy(() => import("./pages/collector/PickupRequests"));
+const PickupDetail = lazy(() => import("./pages/collector/PickupDetail"));
+const VerifyOtp = lazy(() => import("./pages/collector/VerifyOtp"));
+const AssignedPickups = lazy(() => import("./pages/collector/Assigned"));
+const CompletedPickups = lazy(() => import("./pages/collector/Completed"));
+const CollectorProfile = lazy(() => import("./pages/collector/Profile"));
+const Availability = lazy(() => import("./pages/collector/Availability"));
+
+// Suspense wrapper for lazy routes
+const SuspenseWrapper = ({ children }) => (
+  <Suspense fallback={<div className="min-h-screen flex items-center justify-center"><Loader text="Loading page..." /></div>}>
+    {children}
+  </Suspense>
+);
 
 export const router = createBrowserRouter([
   // ================= PUBLIC =================
   { path: "/", element: <Login /> },
   { path: "/register", element: <Register /> },
 
-  // ✅ OTP page MUST be public — collector is not logged in yet during verification
-  { path: "/collector/verify-otp/:userId", element: <VerifyOtp /> },
+  { path: "/collector/verify-otp/:userId", element: <SuspenseWrapper><VerifyOtp /></SuspenseWrapper> },
 
   // ================= PROTECTED =================
   {
@@ -41,11 +54,14 @@ export const router = createBrowserRouter([
       {
         element: <DashboardLayout />,
         children: [
-          { path: "/dashboard", element: <Dashboard /> },
-          { path: "/pickups", element: <PickupList /> },
-          { path: "/pickups/create", element: <CreatePickup /> },
-          { path: "/wallet", element: <Wallet /> },
-          { path: "/profile", element: <Profile /> },
+          { path: "/dashboard", element: <SuspenseWrapper><Dashboard /></SuspenseWrapper> },
+          { path: "/pickups", element: <SuspenseWrapper><PickupList /></SuspenseWrapper> },
+          { path: "/pickups/create", element: <SuspenseWrapper><CreatePickup /></SuspenseWrapper> },
+          { path: "/pickups/history", element: <SuspenseWrapper><PickupHistory /></SuspenseWrapper> },
+          { path: "/pickups/:id", element: <SuspenseWrapper><PickupDetails /></SuspenseWrapper> },
+          { path: "/wallet", element: <SuspenseWrapper><Wallet /></SuspenseWrapper> },
+          { path: "/profile", element: <SuspenseWrapper><Profile /></SuspenseWrapper> },
+          { path: "/ai-decision", element: <SuspenseWrapper><AiDecision /></SuspenseWrapper> },
         ],
       },
 
@@ -54,12 +70,13 @@ export const router = createBrowserRouter([
         path: "/collector",
         element: <CollectorLayout />,
         children: [
-          { path: "dashboard", element: <CollectorDashboard /> },
-          { path: "requests", element: <PickupRequests /> },
-          { path: "requests/:id", element: <PickupDetail /> },
-          { path: "assigned", element: <AssignedPickups /> },
-          { path: "completed", element: <CompletedPickups /> },
-          { path: "Collectorwallet", element: <CollectorWallet /> },
+          { path: "dashboard", element: <SuspenseWrapper><CollectorDashboard /></SuspenseWrapper> },
+          { path: "requests", element: <SuspenseWrapper><PickupRequests /></SuspenseWrapper> },
+          { path: "requests/:id", element: <SuspenseWrapper><PickupDetail /></SuspenseWrapper> },
+          { path: "assigned", element: <SuspenseWrapper><AssignedPickups /></SuspenseWrapper> },
+          { path: "completed", element: <SuspenseWrapper><CompletedPickups /></SuspenseWrapper> },
+          { path: "profile", element: <SuspenseWrapper><CollectorProfile /></SuspenseWrapper> },
+          { path: "availability", element: <SuspenseWrapper><Availability /></SuspenseWrapper> },
         ],
       },
     ],

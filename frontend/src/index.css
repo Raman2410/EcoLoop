@@ -1,3 +1,41 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+@layer utilities {
+  /* Smooth sidebar transitions */
+  .duration-250 {
+    transition-duration: 250ms;
+  }
+
+  /* One-shot pulse for newly arrived pickup cards */
+  .animate-pulse-once {
+    animation: pulse-once 1.2s ease-in-out 3;
+  }
+}
+
+@keyframes pulse-once {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(34, 197, 94, 0);
+  }
+  50% {
+    box-shadow: 0 0 0 6px rgba(34, 197, 94, 0.25);
+  }
+}
+
+@layer base {
+  /* Prevent horizontal overflow on mobile */
+  html, body {
+    overflow-x: hidden;
+  }
+
+  /* Smooth scrolling */
+  html {
+    scroll-behavior: smooth;
+  }
+
+  /* Better tap targets on mobile */
+  button, a {
+    -webkit-tap-highlight-color: transparent;
+  }
+}

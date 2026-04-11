@@ -1,9 +1,13 @@
-import { useEffect, useState } from "react";
-import { getMyPickups, cancelPickup } from "../../services/pickup.service";import Loader from "../../components/common/Loader";
+import { useEffect, useState, useMemo, memo, useCallback } from "react";
+import { useNavigate } from "react-router-dom";
+import { getMyPickups, cancelPickup } from "../../services/pickup.service";
+import Loader from "../../components/common/Loader";
 import toast from "react-hot-toast";
 import { getPickupWeightKg } from "../../utils/pickupWeight";
+import PickupMap from "../../components/common/PickupMap";
+import { useSocket } from "../../context/SocketContext";
+import Pagination from "../../components/common/Pagination";
 
-// ─── Scrap type → icon map ───────────────────────────────────────────────────
 const SCRAP_ICONS = {
   metal: "🔩",
   plastic: "🧴",
@@ -15,303 +19,384 @@ const SCRAP_ICONS = {
   rubber: "🔄",
   other: "♻",
 };
-const getIcon = (type = "") =>
-  SCRAP_ICONS[type.toLowerCase()] ?? "♻";
+const getIcon = (type = "") => SCRAP_ICONS[type.toLowerCase()] ?? "♻";
 
-// ─── Status config ────────────────────────────────────────────────────────────
-const STATUS = {
-  completed: { bg: "#dcfce7", color: "#166534", dot: "#16a34a", label: "Completed" },
-  pending:   { bg: "#fef9c3", color: "#854d0e", dot: "#ca8a04", label: "Pending"   },
-  default:   { bg: "#f1f5f9", color: "#475569", dot: "#94a3b8", label: ""          },
+const STATUS_MAP = {
+  completed: {
+    bg: "bg-green-100",
+    text: "text-green-700",
+    dot: "bg-green-500",
+    label: "Completed",
+  },
+  pending: {
+    bg: "bg-yellow-100",
+    text: "text-yellow-700",
+    dot: "bg-yellow-500",
+    label: "Pending",
+  },
+  assigned: {
+    bg: "bg-blue-100",
+    text: "text-blue-700",
+    dot: "bg-blue-500",
+    label: "Assigned",
+  },
+  in_progress: {
+    bg: "bg-purple-100",
+    text: "text-purple-700",
+    dot: "bg-purple-500",
+    label: "In Progress",
+  },
+  cancelled: {
+    bg: "bg-red-100",
+    text: "text-red-600",
+    dot: "bg-red-400",
+    label: "Cancelled",
+  },
 };
-const getStatus = (s = "") => STATUS[s.toLowerCase()] ?? { ...STATUS.default, label: s };
+const getStatus = (s = "") =>
+  STATUS_MAP[s.toLowerCase()] ?? {
+    bg: "bg-gray-100",
+    text: "text-gray-600",
+    dot: "bg-gray-400",
+    label: s,
+  };
 
-// ─── Tiny card for category impact ───────────────────────────────────────────
-const ImpactTile = ({ type, kg }) => (
-  <div
-    style={{
-      background: "#f0fdf4",
-      border: "1px solid #bbf7d0",
-      borderRadius: "14px",
-      padding: "16px",
-      display: "flex",
-      flexDirection: "column",
-      gap: "6px",
-    }}
-  >
-    <span style={{ fontSize: "22px" }}>{getIcon(type)}</span>
-    <p style={{ margin: 0, fontSize: "11px", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "#86efac" }}>
+// ── Impact tile ──────────────────────────────────────────────────────────────
+const ImpactTile = memo(({ type, kg }) => (
+  <div className="bg-green-50 border border-green-200 rounded-2xl p-4 flex flex-col gap-1.5">
+    <span className="text-2xl">{getIcon(type)}</span>
+    <p className="text-[11px] font-bold uppercase tracking-widest text-green-400">
       {type}
     </p>
-    <p style={{ margin: 0, fontSize: "24px", fontWeight: 800, color: "#15803d", letterSpacing: "-0.5px" }}>
-      {kg}<span style={{ fontSize: "13px", fontWeight: 600, color: "#4ade80", marginLeft: "3px" }}>kg</span>
+    <p className="text-2xl font-extrabold text-green-700 tracking-tight">
+      {kg}
+      <span className="text-sm font-semibold text-green-400 ml-1">kg</span>
     </p>
   </div>
-);
+));
+ImpactTile.displayName = "ImpactTile";
 
-// ─── Single pickup card ───────────────────────────────────────────────────────
-const PickupCard = ({ pickup, onDelete, index }) => {
-  const st = getStatus(pickup.status);
-  const isPending = pickup.status?.toLowerCase() === "pending";
-  const [hovered, setHovered] = useState(false);
+// ── Single pickup card ───────────────────────────────────────────────────────
+const PickupCard = memo(
+  ({ pickup, onDelete, onViewDetails, collectorCoords }) => {
+    const st = getStatus(pickup.status);
+    const isPending = pickup.status?.toLowerCase() === "pending";
+    const isActive = ["assigned", "in_progress"].includes(
+      pickup.status?.toLowerCase(),
+    );
+    const isInProgress = pickup.status?.toLowerCase() === "in_progress";
 
-  return (
-    <div
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
-      style={{
-        fontFamily: "'DM Sans', sans-serif",
-        background: "#fff",
-        borderRadius: "18px",
-        overflow: "hidden",
-        boxShadow: hovered
-          ? "0 12px 40px rgba(0,0,0,0.10)"
-          : "0 2px 12px rgba(0,0,0,0.06)",
-        transform: hovered ? "translateY(-3px)" : "translateY(0)",
-        transition: "transform 0.22s ease, box-shadow 0.22s ease",
-        display: "flex",
-        flexDirection: "column",
-        animationDelay: `${index * 60}ms`,
-        animationFillMode: "both",
-      }}
-    >
-      {/* Status accent strip */}
-      <div style={{ height: "3px", background: st.dot }} />
+    return (
+      <div className="bg-white rounded-2xl overflow-hidden shadow-sm hover:shadow-md transition-shadow flex flex-col">
+        {/* Status accent strip */}
+        <div className={`h-1 ${st.dot}`} />
 
-      <div style={{ padding: "22px", flex: 1, display: "flex", flexDirection: "column" }}>
-        {/* Header row */}
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "18px" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-            <div
-              style={{
-                width: "40px", height: "40px",
-                borderRadius: "12px",
-                background: "#f0fdf4",
-                display: "flex", alignItems: "center", justifyContent: "center",
-                fontSize: "20px",
-                flexShrink: 0,
-              }}
-            >
-              {getIcon(pickup.scrapType)}
+        <div className="p-5 flex-1 flex flex-col">
+          {/* Header */}
+          <div className="flex justify-between items-start mb-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-green-50 flex items-center justify-center text-xl shrink-0">
+                {getIcon(pickup.scrapType)}
+              </div>
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400">
+                  Scrap Type
+                </p>
+                <h3 className="text-base font-bold text-gray-900 capitalize">
+                  {pickup.scrapType}
+                </h3>
+              </div>
             </div>
-            <div>
-              <p style={{ margin: 0, fontSize: "10px", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.09em", color: "#a3a3a3" }}>
-                Scrap Type
+            <span
+              className={`inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1 rounded-full ${st.bg} ${st.text}`}
+            >
+              <span className={`w-1.5 h-1.5 rounded-full ${st.dot}`} />
+              {st.label}
+            </span>
+          </div>
+
+          {/* Details */}
+          <div className="flex flex-col gap-2 mb-4 text-sm">
+            <div className="flex gap-2 items-start">
+              <span className="shrink-0 mt-0.5">📍</span>
+              <p className="text-gray-600">
+                <span className="font-semibold text-gray-800">Address:</span>{" "}
+                {pickup.address}
               </p>
-              <h3 style={{ margin: "2px 0 0", fontSize: "16px", fontWeight: 700, color: "#171717", letterSpacing: "-0.2px" }}>
-                {pickup.scrapType}
-              </h3>
+            </div>
+            <div className="flex gap-2 items-start">
+              <span className="shrink-0">⚖️</span>
+              <p className="text-gray-600">
+                <span className="font-semibold text-gray-800">Load:</span>{" "}
+                {pickup.approxLoad}
+              </p>
+            </div>
+            <div className="flex gap-2 items-start">
+              <span className="shrink-0">🗓</span>
+              <p className="text-gray-600">
+                <span className="font-semibold text-gray-800">Scheduled:</span>{" "}
+                {new Date(pickup.scheduledDate).toLocaleDateString("en-IN", {
+                  day: "2-digit",
+                  month: "short",
+                  year: "numeric",
+                })}
+              </p>
             </div>
           </div>
 
-          {/* Status badge */}
-          <span style={{
-            display: "inline-flex", alignItems: "center", gap: "5px",
-            fontSize: "11px", fontWeight: 600,
-            padding: "4px 10px", borderRadius: "999px",
-            background: st.bg, color: st.color,
-          }}>
-            <span style={{ width: "6px", height: "6px", borderRadius: "50%", background: st.dot, flexShrink: 0 }} />
-            {pickup.status}
-          </span>
-        </div>
-
-        {/* Detail rows */}
-        <div style={{ display: "flex", flexDirection: "column", gap: "10px", marginBottom: "20px" }}>
-          <DetailRow icon="📍" label="Address" value={pickup.address} />
-          <DetailRow icon="⚖️" label="Load" value={pickup.approxLoad} />
-          <DetailRow
-            icon="🗓"
-            label="Scheduled"
-            value={new Date(pickup.scheduledDate).toLocaleDateString("en-IN", {
-              day: "2-digit", month: "short", year: "numeric",
-            })}
-          />
-        </div>
-
-        {/* Footer */}
-        <div style={{
-          marginTop: "auto",
-          paddingTop: "14px",
-          borderTop: "1px solid #f5f5f5",
-          display: "flex", justifyContent: "space-between", alignItems: "center",
-        }}>
-          <span style={{ fontSize: "10px", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.1em", color: "#d4d4d4" }}>
-            Pickup Request
-          </span>
-
-          {isPending && (
-            <button
-              onClick={() => onDelete(pickup._id)}
-              style={{
-                background: "none", border: "none", cursor: "pointer",
-                fontSize: "12px", fontWeight: 600, color: "#ef4444",
-                padding: "4px 8px", borderRadius: "6px",
-                transition: "background 0.15s",
-              }}
-              onMouseEnter={e => e.currentTarget.style.background = "#fef2f2"}
-              onMouseLeave={e => e.currentTarget.style.background = "none"}
-            >
-              Delete
-            </button>
+          {/* Live map — shown for assigned / in_progress pickups */}
+          {isActive && (
+            <div className="mb-4">
+              {isInProgress && (
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+                  <p className="text-xs font-semibold text-green-700">
+                    {collectorCoords
+                      ? "Collector is on the way"
+                      : "Collector heading to you"}
+                  </p>
+                </div>
+              )}
+              <PickupMap
+                address={pickup.address}
+                collectorCoords={collectorCoords}
+                height="180px"
+              />
+            </div>
           )}
+
+          {/* Footer */}
+          <div className="mt-auto pt-3 border-t border-gray-100 flex justify-between items-center">
+            <button
+              onClick={() => onViewDetails(pickup._id)}
+              className="text-xs font-semibold text-green-600 hover:bg-green-50 px-3 py-1.5 rounded-md transition-colors border border-green-200"
+            >
+              View Details
+            </button>
+            {isPending && (
+              <button
+                onClick={() => onDelete(pickup._id)}
+                className="text-xs font-semibold text-red-500 hover:bg-red-50 px-2 py-1 rounded-md transition-colors"
+              >
+                Delete
+              </button>
+            )}
+          </div>
         </div>
       </div>
-    </div>
-  );
-};
-
-const DetailRow = ({ icon, label, value }) => (
-  <div style={{ display: "flex", gap: "8px", alignItems: "flex-start" }}>
-    <span style={{ fontSize: "13px", marginTop: "1px", flexShrink: 0 }}>{icon}</span>
-    <p style={{ margin: 0, fontSize: "13px", color: "#737373", lineHeight: 1.5 }}>
-      <span style={{ fontWeight: 600, color: "#404040" }}>{label}:</span>{" "}
-      {value}
-    </p>
-  </div>
+    );
+  },
 );
+PickupCard.displayName = "PickupCard";
 
-// ─── Main component ───────────────────────────────────────────────────────────
+// ── Main ─────────────────────────────────────────────────────────────────────
 const PickupList = () => {
+  const navigate = useNavigate();
   const [pickups, setPickups] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  // Map: pickupId → [lat, lng] — updated via socket as collector moves
+  const [collectorPositions, setCollectorPositions] = useState({});
+  const { socketRef, connected } = useSocket();
+  const socket = socketRef.current;
 
+  // Pagination states
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [total, setTotal] = useState(0);
+  const [count, setCount] = useState(0);
+
+  // Listen for live collector location updates
   useEffect(() => {
-    const fetchPickups = async () => {
-      const data = await getMyPickups();
-      setPickups(data);
-      setLoading(false);
+    const socket = socketRef.current;
+    if (!socket || !connected) return;
+    const handler = ({ pickupId, lat, lng }) => {
+      setCollectorPositions((prev) => ({ ...prev, [pickupId]: [lat, lng] }));
     };
-    fetchPickups();
+    socket.on("collector-location", handler);
+    return () => socket.off("collector-location", handler);
+  }, [connected]);
+
+  // Real-time: collector accepted → update card status instantly
+  useEffect(() => {
+    const socket = socketRef.current;
+    if (!socket || !connected) return;
+    const handler = ({ pickupId, collectorName }) => {
+      setPickups((prev) =>
+        prev.map((p) =>
+          p._id === pickupId ? { ...p, status: "assigned", collectorName } : p,
+        ),
+      );
+      toast.success(`${collectorName} accepted your pickup! 🚴`, {
+        duration: 5000,
+      });
+    };
+    socket.on("pickup-accepted", handler);
+    return () => socket.off("pickup-accepted", handler);
+  }, [connected]);
+
+  // Real-time: OTP generated → update card status to in_progress
+  useEffect(() => {
+    const socket = socketRef.current;
+    if (!socket || !connected) return;
+    const handler = ({ pickupId }) => {
+      setPickups((prev) =>
+        prev.map((p) =>
+          p._id === pickupId ? { ...p, status: "in_progress" } : p,
+        ),
+      );
+    };
+    socket.on("otp-generated", handler);
+    return () => socket.off("otp-generated", handler);
+  }, [connected]);
+
+  // Real-time: pickup completed → update card status instantly
+  useEffect(() => {
+    const socket = socketRef.current;
+    if (!socket || !connected) return;
+    const handler = ({ pickupId, ecoCoinsEarned, weightKg }) => {
+      setPickups((prev) =>
+        prev.map((p) =>
+          p._id === pickupId
+            ? {
+                ...p,
+                status: "completed",
+                actualWeight: weightKg,
+                ecoCoins: ecoCoinsEarned,
+              }
+            : p,
+        ),
+      );
+      toast.success(
+        `Pickup complete! +${ecoCoinsEarned} EcoCoins for ${weightKg}kg recycled ♻️`,
+        { duration: 6000 },
+      );
+    };
+    socket.on("pickup-completed", handler);
+    return () => socket.off("pickup-completed", handler);
+  }, [connected]);
+
+  const fetchPickups = useCallback(async (page = 1) => {
+    setLoading(true);
+    setError(null);
+    try {
+      const data = await getMyPickups(page, 10, "active");
+      const list = Array.isArray(data) ? data : data?.pickups || [];
+      setPickups(list);
+      setCurrentPage(data?.page || 1);
+      setTotalPages(data?.totalPages || 1);
+      setTotal(data?.total || 0);
+      setCount(data?.count || 0);
+    } catch (err) {
+      console.error("Failed to load pickups", err);
+      // 401 is handled globally (auto-logout). Surface all other errors.
+      const msg =
+        err.response?.data?.message ||
+        "Could not load your pickups. Please try again.";
+      setError(msg);
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
- const handleDelete = async (id) => {
-  const confirm = window.confirm(
-    "Are you sure you want to cancel this pickup request?"
+  const handlePageChange = useCallback(
+    (newPage) => {
+      setCurrentPage(newPage);
+      fetchPickups(newPage);
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    },
+    [fetchPickups],
   );
-  if (!confirm) return;
 
-  try {
-    await cancelPickup(id);
-    setPickups((prev) =>
-      prev.map((p) => p._id === id ? { ...p, status: "cancelled" } : p)
-    );
-    toast.success("Pickup cancelled successfully");
-  } catch (error) {
-    toast.error(error.response?.data?.message || "Failed to cancel pickup");
-  }
-};
+  useEffect(() => {
+    fetchPickups();
+  }, [fetchPickups]);
+
+  const handleDelete = useCallback(async (id) => {
+    if (!window.confirm("Are you sure you want to cancel this pickup request?"))
+      return;
+    try {
+      await cancelPickup(id);
+      setPickups((prev) =>
+        prev.map((p) => (p._id === id ? { ...p, status: "cancelled" } : p)),
+      );
+      toast.success("Pickup cancelled successfully");
+    } catch (error) {
+      toast.error(error.response?.data?.message || "Failed to cancel pickup");
+    }
+  }, []);
 
   if (loading) return <Loader text="Loading pickups..." />;
 
-  // Category-wise impact (COMPLETED pickups only)
-  const categoryImpact = pickups.reduce((acc, pickup) => {
-    if (pickup.status?.toLowerCase() !== "completed") return acc;
-    const type = pickup.scrapType || "Other";
-    const kg = getPickupWeightKg(pickup);
-    acc[type] = (acc[type] || 0) + kg;
-    return acc;
-  }, {});
-  
+  // ── Error state ────────────────────────────────────────────────────────────
+  if (error) {
+    return (
+      <div className="bg-white rounded-2xl p-5 sm:p-8 border border-gray-100 shadow-sm">
+        <div className="border-2 border-dashed border-red-100 rounded-2xl py-14 text-center">
+          <span className="text-4xl">⚠️</span>
+          <p className="mt-4 text-base font-semibold text-red-500">{error}</p>
+          <button
+            onClick={fetchPickups}
+            className="mt-4 px-5 py-2 bg-green-600 text-white text-sm font-medium rounded-xl hover:bg-green-500 transition-colors"
+          >
+            Retry
+          </button>
+        </div>
+      </div>
+    );
+  }
 
-  const totalKg = Object.values(categoryImpact).reduce((s, v) => s + v, 0);
+  // Only show active pickups — completed and cancelled are in History
+  const activePickups = pickups.filter(
+    (p) => !["completed", "cancelled"].includes(p.status?.toLowerCase()),
+  );
 
   return (
-    <div
-      style={{
-        fontFamily: "'DM Sans', sans-serif",
-        background: "#fafafa",
-        borderRadius: "24px",
-        padding: "32px",
-        border: "1px solid #f0f0f0",
-        boxShadow: "0 2px 20px rgba(0,0,0,0.04)",
-      }}
-    >
-      {/* ── Page header ── */}
-      <div style={{ marginBottom: "32px" }}>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "12px" }}>
-          <div>
-            <h2 style={{ margin: 0, fontSize: "26px", fontWeight: 800, color: "#111", letterSpacing: "-0.5px" }}>
-              My Pickups
-            </h2>
-            <p style={{ margin: "4px 0 0", fontSize: "13px", color: "#9ca3af" }}>
-              View and manage all your pickup requests
-            </p>
-          </div>
-
-          {pickups.length > 0 && (
-            <div style={{
-              background: "#fff",
-              border: "1px solid #e5e7eb",
-              borderRadius: "12px",
-              padding: "10px 18px",
-              display: "flex", alignItems: "center", gap: "10px",
-            }}>
-              <span style={{ fontSize: "20px" }}>♻️</span>
-              <div>
-                <p style={{ margin: 0, fontSize: "10px", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "#9ca3af" }}>Total Recycled</p>
-                <p style={{ margin: 0, fontSize: "18px", fontWeight: 800, color: "#16a34a", letterSpacing: "-0.3px" }}>
-                  {totalKg} <span style={{ fontSize: "12px", fontWeight: 600 }}>kg</span>
-                </p>
-              </div>
-            </div>
-          )}
+    <div className="bg-white rounded-2xl p-5 sm:p-8 border border-gray-100 shadow-sm">
+      {/* Header */}
+      <div className="flex flex-wrap items-start justify-between gap-4 mb-8">
+        <div>
+          <h2 className="text-2xl sm:text-3xl font-extrabold text-gray-900 tracking-tight">
+            My Pickups
+          </h2>
+          <p className="text-sm text-gray-400 mt-1">
+            View and manage all your active pickup requests
+          </p>
         </div>
       </div>
 
-      {/* ── Recycling breakdown ── */}
-      {Object.keys(categoryImpact).length > 0 && (
-        <div style={{ marginBottom: "32px" }}>
-          <p style={{ margin: "0 0 14px", fontSize: "13px", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "#9ca3af" }}>
-            Your Recycling Breakdown
+      {/* Empty state */}
+      {activePickups.length === 0 ? (
+        <div className="border-2 border-dashed border-gray-200 rounded-2xl py-14 text-center">
+          <span className="text-4xl">🚚</span>
+          <p className="mt-4 text-base font-semibold text-gray-500">
+            No active pickups
           </p>
-          <div style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(auto-fill, minmax(120px, 1fr))",
-            gap: "12px",
-          }}>
-            {Object.entries(categoryImpact).map(([type, kg]) => (
-              <ImpactTile key={type} type={type} kg={kg} />
-            ))}
-          </div>
-          <p style={{ margin: "10px 0 0", fontSize: "11px", color: "#d1d5db" }}>
-            * Calculated from completed pickups only
-          </p>
-        </div>
-      )}
-
-      {/* ── Empty state ── */}
-      {pickups.length === 0 ? (
-        <div style={{
-          background: "#fff",
-          border: "2px dashed #e5e7eb",
-          borderRadius: "16px",
-          padding: "56px 24px",
-          textAlign: "center",
-        }}>
-          <span style={{ fontSize: "40px" }}>🚚</span>
-          <p style={{ margin: "14px 0 4px", fontSize: "16px", fontWeight: 600, color: "#6b7280" }}>
-            No pickups yet
-          </p>
-          <p style={{ margin: 0, fontSize: "13px", color: "#d1d5db" }}>
+          <p className="text-sm text-gray-300 mt-1">
             Schedule a pickup to start recycling.
           </p>
         </div>
       ) : (
-        /* ── Grid ── */
-        <div style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))",
-          gap: "20px",
-        }}>
-          {pickups.map((pickup, i) => (
-            <PickupCard
-              key={pickup._id}
-              pickup={pickup}
-              onDelete={handleDelete}
-              index={i}
-            />
-          ))}
+        <div className="space-y-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-5">
+            {activePickups.map((pickup) => (
+              <PickupCard
+                key={pickup._id}
+                pickup={pickup}
+                onDelete={handleDelete}
+                onViewDetails={(id) => navigate(`/pickups/${id}`)}
+                collectorCoords={collectorPositions[pickup._id] ?? null}
+              />
+            ))}
+          </div>
+
+          <Pagination
+            currentPage={currentPage}
+            totalPages={totalPages}
+            total={total}
+            count={count}
+            onPageChange={handlePageChange}
+          />
         </div>
       )}
     </div>

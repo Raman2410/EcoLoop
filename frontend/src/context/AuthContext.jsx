@@ -1,4 +1,5 @@
 import { createContext, useContext, useEffect, useState } from "react";
+import axiosInstance from "../api/axiosInstance";
 
 const AuthContext = createContext(null);
 
@@ -20,7 +21,6 @@ export const AuthProvider = ({ children }) => {
         }
       } catch (error) {
         console.error("Error loading auth from localStorage:", error);
-        // Clear corrupted data
         localStorage.removeItem("user");
         localStorage.removeItem("token");
       } finally {
@@ -45,8 +45,21 @@ export const AuthProvider = ({ children }) => {
     localStorage.removeItem("token");
   };
 
+  const refreshUser = async () => {
+    try {
+      const response = await axiosInstance.get("/auth/me");
+      const updatedUser = response.data;
+      setUser(updatedUser);
+      localStorage.setItem("user", JSON.stringify(updatedUser));
+      return updatedUser;
+    } catch (error) {
+      console.error("Failed to refresh user profile:", error);
+      return user;
+    }
+  };
+
   return (
-    <AuthContext.Provider value={{ user, token, loading, login, logout }}>
+    <AuthContext.Provider value={{ user, token, loading, login, logout, refreshUser }}>
       {children}
     </AuthContext.Provider>
   );

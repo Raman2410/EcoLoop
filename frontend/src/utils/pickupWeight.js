@@ -1,25 +1,30 @@
-// Fallback mapping (used ONLY if backend weight not available)
+// Weight mapping — must stay in sync with LOAD_TO_WEIGHT in pickupController.js
 const LOAD_TO_KG = {
-  small: 5,
-  medium: 10,
-  large: 20,
-  bulk: 40,
+  small: 2,
+  medium: 5,
+  large: 10,
+  bulk: 20,
 };
 
 /**
- * Returns accurate pickup weight in KG
+ * Returns accurate pickup weight in KG.
  * Priority:
- * 1️⃣ actualWeightKg (from backend, future-ready)
- * 2️⃣ derived from approxLoad (current)
+ * 1. actualWeight  — set by backend on OTP-verified completion
+ * 2. approxLoad    — estimated fallback for pending/assigned pickups
+ *
+ * NOTE: approxLoad is normalised to lowercase before lookup so values like
+ * "Small" or "MEDIUM" (which can arrive from older records) still resolve.
  */
 export const getPickupWeightKg = (pickup) => {
   if (!pickup) return 0;
 
-  // 🔹 Future backend value
-  if (typeof pickup.actualWeightKg === "number") {
-    return pickup.actualWeightKg;
+  // Backend sets `actualWeight` (not `actualWeightKg`) on completion
+  if (typeof pickup.actualWeight === "number" && pickup.actualWeight > 0) {
+    return pickup.actualWeight;
   }
 
-  // 🔹 Current derived fallback
-  return LOAD_TO_KG[pickup.approxLoad] || 0;
+  // Normalise to lowercase — the DB stores "small"/"medium"/etc. already,
+  // but guard against any case inconsistency from older records.
+  const load = (pickup.approxLoad || "").toLowerCase();
+  return LOAD_TO_KG[load] || 0;
 };

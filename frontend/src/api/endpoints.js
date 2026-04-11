@@ -11,3 +11,13 @@ export const PICKUP_ENDPOINTS = {
 export const WALLET_ENDPOINTS = {
   DETAILS: "/wallet",
 };
+
+export const AI_ENDPOINTS = {
+  ASSISTANT: "/ai/assistant",
+};
+
+// ── Voucher endpoints ─────────────────────────────────────────────────────────
+export const VOUCHER_ENDPOINTS = {
+  REDEEM: "/vouchers/redeem",
+  MY_VOUCHERS: "/vouchers/my",
+};

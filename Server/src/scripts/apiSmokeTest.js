@@ -175,7 +175,10 @@ const run = async () => {
       role: "collector",
       phone: collectorPhone,
       businessName: "Green Recycling Co",
-      serviceArea: "Downtown District",
+      // Must match the pickup's address/area so the service-area filter returns
+      // this pickup in GET /api/pickups/pending. The pickup is created with
+      // address "123 Main St" which becomes its area value.
+      serviceArea: "123 Main St",
       vehicleType: "truck",
       vehicleNumber: "ECO-2024",
     },
@@ -355,8 +358,10 @@ const run = async () => {
     token: collectorLoginToken,
   });
   expectStatus(pendingRes, 200, "GET /api/pickups/pending");
+  if (!pendingRes.data?.success)
+    throw new Error("GET /api/pickups/pending did not return { success: true }");
   console.log("✓ GET /api/pickups/pending");
-  console.log(`  Pending pickups: ${pendingRes.data.length}\n`);
+  console.log(`  Pending pickups: ${pendingRes.data.count}\n`);
 
   // ── 14. Accept Pickup ─────────────────────────────────────────────────────
   const acceptRes = await request(
@@ -376,14 +381,65 @@ const run = async () => {
   expectStatus(cancelAssignedRes, 400, "PATCH /api/pickups/cancel/:id (assigned pickup)");
   console.log("✓ Cannot cancel an already-assigned pickup\n");
 
-  // ── 15. Complete Pickup ───────────────────────────────────────────────────
-  const completeRes = await request(
+  // ── 15. Complete Pickup via OTP Verification ──────────────────────────────
+  // Step 15a: Collector triggers OTP generation (arrives at pickup location)
+  const generateOtpRes = await request(
+    "POST",
+    `/api/pickups/generate-otp/${pickupId}`,
+    { token: collectorLoginToken }
+  );
+  expectStatus(generateOtpRes, 200, "POST /api/pickups/generate-otp/:id");
+  if (!generateOtpRes.data?.success)
+    throw new Error("generate-otp did not return { success: true }");
+  if (!generateOtpRes.data?.otpExpiresAt)
+    throw new Error("generate-otp did not return otpExpiresAt");
+  console.log("✓ POST /api/pickups/generate-otp/:id");
+  console.log(`  OTP expires at: ${generateOtpRes.data.otpExpiresAt}`);
+
+  // Step 15b: Read the OTP from the database (simulates user reading it aloud)
+  await mongoose.default.connect(mongoUri);
+  const { default: Pickup } = await import("../models/Pickup.model.js");
+  const pickupFromDb = await Pickup.findById(pickupId).select("+completionOtp");
+  if (!pickupFromDb?.completionOtp)
+    throw new Error("completionOtp not found in DB after generate-otp.");
+  const completionOtp = pickupFromDb.completionOtp;
+  await mongoose.default.disconnect();
+
+  // Step 15c: Verify the wrong OTP first — must be rejected
+  const wrongOtpRes = await request(
+    "POST",
+    `/api/pickups/verify-otp/${pickupId}`,
+    { token: collectorLoginToken, body: { otp: "000000" } }
+  );
+  expectStatus(wrongOtpRes, 400, "POST /api/pickups/verify-otp/:id (wrong OTP)");
+  console.log("✓ Wrong OTP correctly rejected");
+  console.log(`  Message: ${wrongOtpRes.data.message}`);
+
+  // Step 15d: Verify with the correct OTP — pickup completes
+  const verifyCompleteRes = await request(
+    "POST",
+    `/api/pickups/verify-otp/${pickupId}`,
+    { token: collectorLoginToken, body: { otp: completionOtp } }
+  );
+  expectStatus(verifyCompleteRes, 200, "POST /api/pickups/verify-otp/:id (correct OTP)");
+  if (!verifyCompleteRes.data?.success)
+    throw new Error("verify-otp did not return { success: true }");
+  if (typeof verifyCompleteRes.data?.ecoCoinsEarned !== "number")
+    throw new Error("verify-otp did not return ecoCoinsEarned");
+  console.log("✓ POST /api/pickups/verify-otp/:id (correct OTP)");
+  console.log(`  EcoCoins earned: ${verifyCompleteRes.data.ecoCoinsEarned}`);
+  console.log(`  Price per kg:    ₹${verifyCompleteRes.data.pricePerKg}\n`);
+
+  // Step 15e: Legacy PATCH /complete/:id must return 400 with clear message
+  const legacyCompleteRes = await request(
     "PATCH",
     `/api/pickups/complete/${pickupId}`,
     { token: collectorLoginToken }
   );
-  expectStatus(completeRes, 200, "PATCH /api/pickups/complete/:id");
-  console.log("✓ PATCH /api/pickups/complete/:id\n");
+  expectStatus(legacyCompleteRes, 400, "PATCH /api/pickups/complete/:id (legacy — blocked)");
+  if (!legacyCompleteRes.data?.message?.includes("generate-otp"))
+    throw new Error("Legacy complete endpoint did not return OTP flow instructions.");
+  console.log("✓ PATCH /api/pickups/complete/:id (legacy endpoint blocked as expected)\n");
 
   // ── 16. Wallet ────────────────────────────────────────────────────────────
   console.log("=== WALLET ===");
@@ -478,7 +534,9 @@ const run = async () => {
   console.log("• Token invalidation after logout:     ✓");
   console.log("• Cancel pickup (+ edge cases):        ✓");
   console.log("• NoSQL injection protection:          ✓");
-  console.log("• Full pickup workflow:                ✓");
+  console.log("• Full pickup workflow (OTP):          ✓");
+  console.log("• Wrong OTP rejected:                  ✓");
+  console.log("• Legacy complete blocked:             ✓");
   console.log("• Wallet operations:                   ✓");
 };
 

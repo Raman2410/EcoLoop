@@ -12,7 +12,7 @@ import {
   logoutCollector,
 } from "../controllers/authController.js";
 import { protect } from "../middlewares/authMiddleware.js";
-import { verifyOtp } from "../controllers/authController.js";
+import { verifyOtp, getMe, updateProfile, updateAvailability } from "../controllers/authController.js";
 
 const router = express.Router();
 
@@ -23,6 +23,13 @@ router.post("/logout", protect, logout);
 
 // otp-verify
 router.post("/verify-otp", verifyOtp);
+
+// Get current user profile
+router.get("/me", protect, getMe);
+
+// Update collector profile & availability
+router.put("/profile", protect, updateProfile);
+router.patch("/availability", protect, updateAvailability);
 
 // Legacy endpoints (optional - remove if not needed)
 router.post("/register/user", registerUser);

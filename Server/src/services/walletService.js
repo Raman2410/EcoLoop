@@ -59,7 +59,10 @@ const creditEcoCoins = async ({ userId, amount, pickupId }) => {
 };
 
 const getWallet = async (userId) => {
-  return walletRepo.getWalletByUserId(userId);
+  const wallet = await walletRepo.getWalletByUserId(userId);
+  if (!wallet) return null;
+  const transactions = await walletRepo.getTransactionsByWalletId(wallet.id);
+  return { ...wallet, transactions };
 };
 
 export default {

@@ -1,60 +1,65 @@
-// Run this once to seed scrap prices into MongoDB
-// Usage: node src/scripts/seedScrapPrices.js
+/**
+ * Seed all scrap prices into MongoDB.
+ *
+ * Usage:
+ *   node src/scripts/seedScrapPrices.js
+ *
+ * Safe to re-run — uses upsert so existing prices are updated, not duplicated.
+ * Requires at least one user in the DB (used as `updatedBy`).
+ */
 
+import "../config/env.js";
 import mongoose from "mongoose";
-import dotenv from "dotenv";
-dotenv.config();
+import connectDB from "../config/db.js";
+import User from "../models/User.model.js";
+import ScrapPrice from "../models/ScrapPrice.model.js";
 
 const SCRAP_PRICES = [
-  { scrapType: "PLASTIC",     pricePerKg: 8  },
-  { scrapType: "PAPER",       pricePerKg: 5  },
-  { scrapType: "CARDBOARD",   pricePerKg: 4  },
-  { scrapType: "METAL",       pricePerKg: 30 },
+  { scrapType: "PLASTIC", pricePerKg: 8 },
+  { scrapType: "PAPER", pricePerKg: 5 },
+  { scrapType: "CARDBOARD", pricePerKg: 4 },
+  { scrapType: "METAL", pricePerKg: 30 },
   { scrapType: "ELECTRONICS", pricePerKg: 50 },
-  { scrapType: "GLASS",       pricePerKg: 3  },
+  { scrapType: "GLASS", pricePerKg: 3 },
 ];
 
-const SCRAP_TYPES = ["PLASTIC", "PAPER", "CARDBOARD", "METAL", "ELECTRONICS", "GLASS"];
-
-const scrapPriceSchema = new mongoose.Schema({
-  scrapType: { type: String, enum: SCRAP_TYPES, required: true, unique: true },
-  pricePerKg: { type: Number, required: true },
-  updatedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
-}, { timestamps: true });
-
-const ScrapPrice = mongoose.model("ScrapPrice", scrapPriceSchema);
-
 const seed = async () => {
-  try {
-    await mongoose.connect(process.env.MONGO_URI);
-    console.log("✅ MongoDB connected");
+  await connectDB();
+  console.log("\n[seedScrapPrices] Connected to MongoDB.\n");
 
-    // Get any existing user to use as updatedBy (required field)
-    const db = mongoose.connection.db;
-    const user = await db.collection("users").findOne({});
-    if (!user) {
-      console.error("❌ No users found. Register at least one user first.");
-      process.exit(1);
-    }
-
-    const updatedBy = user._id;
-    console.log(`Using user: ${user.email} as updatedBy`);
-
-    for (const price of SCRAP_PRICES) {
-      await ScrapPrice.findOneAndUpdate(
-        { scrapType: price.scrapType },
-        { ...price, updatedBy },
-        { upsert: true, new: true }
-      );
-      console.log(`✅ Seeded: ${price.scrapType} = ₹${price.pricePerKg}/kg`);
-    }
-
-    console.log("\n🎉 All scrap prices seeded successfully!");
-    process.exit(0);
-  } catch (err) {
-    console.error("❌ Seed failed:", err.message);
+  // Any user works as `updatedBy` — prefer admin, fall back to first user
+  const adminUser =
+    (await User.findOne({ role: "admin" })) ?? (await User.findOne({}));
+  if (!adminUser) {
+    console.error(
+      "❌  No users found. Register at least one user first, then re-run."
+    );
+    await mongoose.disconnect();
     process.exit(1);
   }
+  console.log(`  Using "${adminUser.email}" as updatedBy.\n`);
+
+  for (const price of SCRAP_PRICES) {
+    await ScrapPrice.findOneAndUpdate(
+      { scrapType: price.scrapType },
+      { ...price, updatedBy: adminUser._id },
+      { upsert: true, new: true }
+    );
+    console.log(`  ✓  ${price.scrapType.padEnd(12)} ₹${price.pricePerKg}/kg`);
+  }
+
+  console.log(`
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+✅  All ${SCRAP_PRICES.length} scrap prices seeded successfully!
+  Collectors can now complete pickups
+  for all scrap types without errors.
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+`);
+
+  await mongoose.disconnect();
 };
 
-seed();
+seed().catch((err) => {
+  console.error("[seedScrapPrices] Fatal error:", err);
+  process.exit(1);
+});
